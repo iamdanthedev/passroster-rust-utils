@@ -1,4 +1,4 @@
-import {parseRruleBetween, greet} from '../pkg/passroster_rust_utils';
+import {parseBetween} from '../pkg/passroster_rust_utils';
 import {rrulestr} from 'rrule';
 
 describe('test', () => {
@@ -8,7 +8,7 @@ describe('test', () => {
     });
 
     it('should parse rrule', () => {
-        const result = parseRruleBetween("DTSTART:20120201T093000Z\nRRULE:FREQ=DAILY", 60, "2020-02-01T09:30:00Z", "2020-02-02T09:30:00Z");
+        const result = parseBetween("DTSTART:20120201T093000Z\nRRULE:FREQ=DAILY", 60, "2020-02-01T09:30:00Z", "2020-02-02T09:30:00Z");
         expect(result).toHaveLength(4);
 
         const start1 = new Date(Number(result[0]));

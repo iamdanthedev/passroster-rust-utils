@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "build": "wasm-pack build --target nodejs",
     "build-test": "wasm-pack build --target nodejs && npm test"
   },
   "author": "",

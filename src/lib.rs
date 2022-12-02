@@ -1,9 +1,14 @@
 mod utils;
 mod occurrence_period;
 mod rrule_utils;
+mod serializable;
 
 use wasm_bindgen::prelude::*;
-use crate::rrule_utils::parse_rrule_between;
+use crate::rrule_utils::{parse_between};
+use crate::serializable::{Serializable, SerializableJs};
+use chrono::{DateTime};
+use js_sys::{Date};
+use crate::occurrence_period::{OccurrencePeriod};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -11,26 +16,15 @@ use crate::rrule_utils::parse_rrule_between;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-// external method, something we might want to call from rust
-// #[wasm_bindgen]
-// extern {
-//     fn alert(s: &str);
-// }
-
-
-#[wasm_bindgen(js_name = "greet")]
-pub fn greet(s: String) {
-    web_sys::console::log_1(&"Hello, world!".into());
-    println!("Hello, {}!", s);
-}
-
-#[wasm_bindgen(js_name = "parseRruleBetween")]
-pub fn parse_rrule_between_ext(rrule: String, duration: i32, after_iso_str: String, before_iso_str: String) -> js_sys::BigInt64Array {
-    let periods = parse_rrule_between(rrule, duration, after_iso_str, before_iso_str);
+#[wasm_bindgen(js_name = "parseBetween")]
+pub fn parse_between_js(ev: SerializableJs, start: Date, end: Date, include_partial: bool) -> js_sys::BigInt64Array {
+    let ev = Serializable::fromJs(ev);
+    let start = DateTime::from(start);
+    let end = DateTime::from(end);
     
-    let seq: Vec<i64> = periods.iter().flat_map(|period| vec![period.start, period.end]).collect();
-    
+    let periods = parse_between(ev, start, end, include_partial);
+
+    let seq: Vec<i64> = periods.iter().flat_map(|period| vec![period.start.timestamp_millis(), period.end.timestamp_millis()]).collect();
+
     js_sys::BigInt64Array::from(seq.as_slice())
 }
-
-// .flat_map(|period| vec![period.start, period.end])
