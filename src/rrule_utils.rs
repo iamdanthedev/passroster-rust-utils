@@ -1,10 +1,9 @@
-use std::str::FromStr;
 use chrono::{DateTime, Utc};
 use rrule::{RRuleSet, Tz};
 use crate::occurrence_period::OccurrencePeriod;
 use crate::serializable::Serializable;
 
-pub fn parse_between(ev: Serializable, start: DateTime<Utc>, end: DateTime<Utc>, include_partial: bool) -> Vec<OccurrencePeriod> {
+pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>, include_partial: bool) -> Vec<OccurrencePeriod> {
     let tz = Tz::UTC;
 
     let rrule_str = string_as_option(ev.rrule.as_str());
@@ -80,8 +79,22 @@ pub fn parse_between(ev: Serializable, start: DateTime<Utc>, end: DateTime<Utc>,
     }
 }
 
+pub fn get_cache_key(ev: &Serializable, start: &DateTime<Utc>, end: &DateTime<Utc>, include_partial: bool) -> String {
+    let mut key = "".to_string();
+    
+    key.push_str(start.to_string().as_str());
+    key.push_str(end.to_string().as_str());
+    key.push_str(ev.start.to_string().as_str());
+    key.push_str(ev.end.to_string().as_str());
+    key.push_str(ev.until.unwrap().to_string().as_str());
+    key.push_str(ev.rrule.as_str());
+    key.push_str(include_partial.to_string().as_str());
+
+    key
+}
+
 fn string_as_option(s: &str) -> Option<String> {
-    if s.is_empty() || s == "" {
+    if s.is_empty() {
         None
     } else {
         Some(s.to_string())
@@ -106,7 +119,7 @@ mod tests {
         let start = str_to_utc("2022-08-10T21:00:00Z");
         let end = str_to_utc("2022-08-11T22:59:58Z");
 
-        let periods = parse_between(ev, start, end, false);
+        let periods = parse_between(&ev, start, end, false);
 
         assert_eq!(periods.len(), 0);
     }
@@ -123,7 +136,7 @@ mod tests {
         let start = str_to_utc("2022-08-17T21:00:00Z");
         let end = str_to_utc("2022-08-18T22:59:58Z");
 
-        let periods = parse_between(ev, start, end, false);
+        let periods = parse_between(&ev, start, end, false);
 
         assert_eq!(periods.len(), 1);
     }
@@ -140,7 +153,7 @@ mod tests {
         let start = str_to_utc("2022-08-11T21:00:00Z");
         let end = str_to_utc("2022-08-18T22:59:58Z");
 
-        let periods = parse_between(ev, start, end, false);
+        let periods = parse_between(&ev, start, end, false);
 
         assert_eq!(periods.len(), 3); // 1 from week 1, 2 from week 2
     }
@@ -157,7 +170,7 @@ mod tests {
         let start = str_to_utc("2022-08-01T00:00:00Z");
         let end = str_to_utc("2022-08-31T00:00:00Z");
 
-        let periods = parse_between(ev, start, end, false);
+        let periods = parse_between(&ev, start, end, false);
         
         assert_eq!(periods.len(), 1);
     }
@@ -174,7 +187,7 @@ mod tests {
         let start = str_to_utc("2022-08-01T00:00:00Z");
         let end = str_to_utc("2022-08-31T00:00:00Z");
 
-        let periods = parse_between(ev, start, end, false);
+        let periods = parse_between(&ev, start, end, false);
 
         assert_eq!(periods.len(), 0);
     }

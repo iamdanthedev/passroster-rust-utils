@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
-use js_sys::Date;
 
+#[derive(Copy, Clone)]
 pub struct OccurrencePeriod {
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
