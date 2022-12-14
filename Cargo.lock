@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "passroster-rust-utils"
-version = "0.1.4"
+version = "0.1.8"
 dependencies = [
  "chrono",
  "console_error_panic_hook",
@@ -316,6 +316,7 @@ dependencies = [
  "lazy_static",
  "lru",
  "once_cell",
+ "regex",
  "rrule",
  "wasm-bindgen",
  "wasm-bindgen-test",

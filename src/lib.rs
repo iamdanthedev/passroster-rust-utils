@@ -5,8 +5,9 @@ mod utils;
 
 use crate::occurrence_period::OccurrencePeriod;
 use crate::rrule_utils::{get_cache_key, parse_between};
+use crate::utils::set_panic_hook;
 use crate::serializable::{Serializable, SerializableJs};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use js_sys::{BigInt64Array, Date};
 use lru::LruCache;
 use once_cell::sync::Lazy;
@@ -32,6 +33,8 @@ pub fn parse_between_js(
     end: Date,
     include_partial: bool,
 ) -> js_sys::BigInt64Array {
+    set_panic_hook();
+
     let ev = Serializable::from_js(ev);
     let start = Utc.timestamp_millis_opt(start.get_time() as i64).unwrap();
     let end = Utc.timestamp_millis_opt(end.get_time() as i64).unwrap();

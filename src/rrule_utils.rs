@@ -1,7 +1,12 @@
+use std::str::FromStr;
+use regex::Regex;
+use lazy_static::lazy_static;
+
 use chrono::{DateTime, Utc};
-use rrule::{RRuleSet, Tz};
+use rrule::{ RRuleSet, Tz };
 use crate::occurrence_period::OccurrencePeriod;
 use crate::serializable::Serializable;
+
 
 pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>, include_partial: bool) -> Vec<OccurrencePeriod> {
     let tz = Tz::UTC;
@@ -33,8 +38,12 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
                 vec![rrule.clone()]
             };
 
-            let rrule_sets: Vec<RRuleSet> = rrules.iter().map(|rrule| {
-                rrule.parse().unwrap()
+            println!("GETTING READY");
+
+            let rrule_sets: Vec<RRuleSet> = rrules.iter().map(|rrule_str| {
+                let rrule_clean = remove_until(rrule_str);
+                println!("{0}", rrule_clean);
+                RRuleSet::from_str(&rrule_clean).unwrap()
             })
                 .collect();
 
@@ -50,12 +59,7 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
                 // .all required a limit in order to prevent infinite loops
                 // in pass-roster the most frequently occurring event is a daily event
                 // so 1000 occurrences should be more than enough
-                let (raw_occurrences, _) = rrule_set.all(1000);
-
-                if raw_occurrences.len() >= 1000 {
-                    panic!("Too many events per rrule");
-                }
-
+                let raw_occurrences = rrule_set.all_unchecked();
 
                 // for each raw occurrence, if it is within the start and end date, add it to the occurrences
                 for occ in raw_occurrences {
@@ -99,6 +103,20 @@ fn string_as_option(s: &str) -> Option<String> {
     } else {
         Some(s.to_string())
     }
+}
+
+fn remove_until(s: &str) -> String {
+    lazy_static! {
+        static ref UNTIL_RE_1: Regex = Regex::new("UNTIL=.+$").unwrap();
+        static ref UNTIL_RE_2: Regex = Regex::new("UNTIL=.+\n").unwrap();
+        static ref BYDAY_UNDEF_RE: Regex = Regex::new("BYDAY=undefined").unwrap();
+
+    }
+
+    let mut result = UNTIL_RE_1.replace_all(s, "").to_string();
+    result = UNTIL_RE_2.replace_all(&result, "\n").to_string();
+    result = BYDAY_UNDEF_RE.replace_all(&result, "").to_string();
+    return result;
 }
 
 #[cfg(test)]
@@ -190,6 +208,31 @@ mod tests {
         let periods = parse_between(&ev, start, end, false);
 
         assert_eq!(periods.len(), 0);
+    }
+
+    #[test]
+    fn test_rrule_with_until() {
+        let ev = Serializable {
+            start: str_to_utc("2015-12-01T09:00:00Z"),
+            end: str_to_utc("2015-12-01T10:00:00Z"),
+            until: Some(str_to_utc("9999-01-01T00:00:00Z")),
+            rrule: "DTSTART;TZID=Europe/London:20220613T180000\nRRULE:FREQ=DAILY;INTERVAL=1;UNTIL=20220614T230000".to_string(),
+        };
+
+        let start = str_to_utc("2022-11-25T00:00:00Z");
+        let end = str_to_utc("2022-12-05T00:00:00Z");
+
+        let periods = parse_between(&ev, start, end, false);
+
+        assert_eq!(periods.len(), 10);
+    }
+
+    #[test]
+    fn test_remove_until() {
+        let input = "DTSTART;TZID=Europe/London:20220513T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH;UNTIL=20220603T225959\nDTSTART;TZID=Europe/London:20220516T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20220603T225959".to_string();
+        let result = remove_until(&input);
+        assert_eq!(result, "DTSTART;TZID=Europe/London:20220513T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH;\nDTSTART;TZID=Europe/London:20220516T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;");
+
     }
 }
 
