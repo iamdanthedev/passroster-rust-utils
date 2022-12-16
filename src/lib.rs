@@ -5,8 +5,8 @@ mod utils;
 
 use crate::occurrence_period::OccurrencePeriod;
 use crate::rrule_utils::{get_cache_key, parse_between};
-use crate::utils::set_panic_hook;
 use crate::serializable::{Serializable, SerializableJs};
+use crate::utils::set_panic_hook;
 use chrono::{TimeZone, Utc};
 use js_sys::{BigInt64Array, Date};
 use lru::LruCache;

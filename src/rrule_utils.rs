@@ -1,14 +1,18 @@
-use std::str::FromStr;
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
+use std::str::FromStr;
 
-use chrono::{DateTime, Utc};
-use rrule::{ RRuleSet, Tz };
 use crate::occurrence_period::OccurrencePeriod;
 use crate::serializable::Serializable;
+use chrono::{DateTime, Utc};
+use rrule::{RRuleSet, Tz};
 
-
-pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>, include_partial: bool) -> Vec<OccurrencePeriod> {
+pub fn parse_between(
+    ev: &Serializable,
+    start: DateTime<Utc>,
+    end: DateTime<Utc>,
+    include_partial: bool,
+) -> Vec<OccurrencePeriod> {
     let tz = Tz::UTC;
 
     let rrule_str = string_as_option(ev.rrule.as_str());
@@ -17,7 +21,7 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
         None => {
             if ev.until.is_some() {
                 let until = ev.until.unwrap();
-                
+
                 if ev.start > until {
                     return vec![];
                 }
@@ -27,26 +31,31 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
         }
 
         Some(rrule) => {
-            let until = ev.until.ok_or("Until is required when rrule is not empty").unwrap();
+            let until = ev
+                .until
+                .ok_or("Until is required when rrule is not empty")
+                .unwrap();
 
             let rrules: Vec<String> = if rrule.contains("DTSTART") {
                 rrule
                     .split("DTSTART")
                     .filter(|s| !s.is_empty())
-                    .map(|s| "DTSTART".to_owned() + s).collect()
+                    .map(|s| "DTSTART".to_owned() + s)
+                    .collect()
             } else {
                 vec![rrule.clone()]
             };
 
             println!("GETTING READY");
 
-            let rrule_sets: Vec<RRuleSet> = rrules.iter().map(|rrule_str| {
-                let rrule_clean = remove_until(rrule_str);
-                println!("{0}", rrule_clean);
-                RRuleSet::from_str(&rrule_clean).unwrap()
-            })
+            let rrule_sets: Vec<RRuleSet> = rrules
+                .iter()
+                .map(|rrule_str| {
+                    let rrule_clean = remove_until(rrule_str);
+                    println!("{0}", rrule_clean);
+                    RRuleSet::from_str(&rrule_clean).unwrap()
+                })
                 .collect();
-
 
             let mut occurrences: Vec<OccurrencePeriod> = vec![];
             let duration = ev.end.signed_duration_since(ev.start);
@@ -71,9 +80,15 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
 
                     if include_partial && occ_utc < ev.start {
                         let diff = ev.start.signed_duration_since(occ_utc);
-                        occurrences.push(OccurrencePeriod { start: occ_utc, end: ev.start + duration - diff });
+                        occurrences.push(OccurrencePeriod {
+                            start: occ_utc,
+                            end: ev.start + duration - diff,
+                        });
                     } else if occ_utc >= ev.start {
-                        occurrences.push(OccurrencePeriod { start: occ_utc, end: occ_utc + duration });
+                        occurrences.push(OccurrencePeriod {
+                            start: occ_utc,
+                            end: occ_utc + duration,
+                        });
                     }
                 }
             }
@@ -83,9 +98,14 @@ pub fn parse_between(ev: &Serializable, start: DateTime<Utc>, end: DateTime<Utc>
     }
 }
 
-pub fn get_cache_key(ev: &Serializable, start: &DateTime<Utc>, end: &DateTime<Utc>, include_partial: bool) -> String {
+pub fn get_cache_key(
+    ev: &Serializable,
+    start: &DateTime<Utc>,
+    end: &DateTime<Utc>,
+    include_partial: bool,
+) -> String {
     let mut key = "".to_string();
-    
+
     key.push_str(start.to_string().as_str());
     key.push_str(end.to_string().as_str());
     key.push_str(ev.start.to_string().as_str());
@@ -110,7 +130,6 @@ fn remove_until(s: &str) -> String {
         static ref UNTIL_RE_1: Regex = Regex::new("UNTIL=.+$").unwrap();
         static ref UNTIL_RE_2: Regex = Regex::new("UNTIL=.+\n").unwrap();
         static ref BYDAY_UNDEF_RE: Regex = Regex::new("BYDAY=undefined").unwrap();
-
     }
 
     let mut result = UNTIL_RE_1.replace_all(s, "").to_string();
@@ -122,8 +141,8 @@ fn remove_until(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{DateTime, Utc, TimeZone};
     use crate::occurrence_period::OccurrencePeriod;
+    use chrono::{DateTime, TimeZone, Utc};
 
     #[test]
     fn test_parse_biweekly_week1() {
@@ -175,21 +194,21 @@ mod tests {
 
         assert_eq!(periods.len(), 3); // 1 from week 1, 2 from week 2
     }
-    
+
     #[test]
     fn test_instance() {
         let ev = Serializable {
             start: str_to_utc("2022-08-08T10:00:00Z"),
             end: str_to_utc("2022-08-08T11:00:00Z"),
             until: Some(str_to_utc("2022-08-08T11:00:00Z")),
-            rrule: "".to_string()
+            rrule: "".to_string(),
         };
 
         let start = str_to_utc("2022-08-01T00:00:00Z");
         let end = str_to_utc("2022-08-31T00:00:00Z");
 
         let periods = parse_between(&ev, start, end, false);
-        
+
         assert_eq!(periods.len(), 1);
     }
 
@@ -199,7 +218,7 @@ mod tests {
             start: str_to_utc("2022-08-08T10:00:00Z"),
             end: str_to_utc("2022-08-08T11:00:00Z"),
             until: Some(str_to_utc("2022-08-08T09:00:00Z")),
-            rrule: "".to_string()
+            rrule: "".to_string(),
         };
 
         let start = str_to_utc("2022-08-01T00:00:00Z");
@@ -232,10 +251,8 @@ mod tests {
         let input = "DTSTART;TZID=Europe/London:20220513T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH;UNTIL=20220603T225959\nDTSTART;TZID=Europe/London:20220516T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20220603T225959".to_string();
         let result = remove_until(&input);
         assert_eq!(result, "DTSTART;TZID=Europe/London:20220513T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,TU,WE,TH;\nDTSTART;TZID=Europe/London:20220516T222900\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;");
-
     }
 }
-
 
 fn str_to_utc(s: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
