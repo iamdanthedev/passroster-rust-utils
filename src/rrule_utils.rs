@@ -1,19 +1,73 @@
+use std::fmt;
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::str::FromStr;
 
 use crate::occurrence_period::OccurrencePeriod;
 use crate::serializable::Serializable;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, NaiveDateTime, Utc};
+use chrono_tz::Europe::London;
 use rrule::{RRuleSet, Tz};
+
+#[derive(Debug, Clone)]
+pub struct InvalidRRuleError {
+    message: String,
+}
+
+impl InvalidRRuleError {
+    fn new(message: String) -> InvalidRRuleError {
+        InvalidRRuleError { message }
+    }
+}
+
+impl fmt::Display for InvalidRRuleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+pub fn parse_rrules(rrule_sets_str: &str) -> Result<Vec<RRuleSet>, InvalidRRuleError> {
+    let rrules_result = string_to_rrule_sets_str(rrule_sets_str);
+    
+    if rrules_result.is_err() {
+        return Err(rrules_result.err().unwrap());
+    }
+    
+    let rrules = rrules_result.unwrap();
+
+    let mut rrule_sets: Vec<RRuleSet> = Vec::new();
+    let mut error: Option<InvalidRRuleError> = None;
+
+    for rrule in rrules {
+        let without_until = remove_until(&rrule);
+        let rrule_result = RRuleSet::from_str(&without_until);
+
+        match rrule_result {
+            Ok(rrule_set) => {
+                rrule_sets.push(rrule_set);
+            }
+            Err(err) => {
+                error = Some(InvalidRRuleError::new(err.to_string()));
+                break;
+            }
+        }
+    }
+
+    match error {
+        Some(err) => Err(err),
+        None => Ok(rrule_sets),
+    }
+}
 
 pub fn parse_between(
     ev: &Serializable,
     start: DateTime<Utc>,
     end: DateTime<Utc>,
     include_partial: bool,
-) -> Vec<OccurrencePeriod> {
+) -> Result<Vec<OccurrencePeriod>, InvalidRRuleError> {
     let tz = Tz::UTC;
+    
+    ev.assert();
 
     let rrule_str = string_as_option(ev.rrule.as_str());
 
@@ -23,39 +77,22 @@ pub fn parse_between(
                 let until = ev.until.unwrap();
 
                 if ev.start > until {
-                    return vec![];
+                    return Ok(vec![]);
                 }
             }
 
-            vec![OccurrencePeriod::from_dates(ev.start, ev.end)]
+            Ok(vec![OccurrencePeriod::from_dates(ev.start, ev.end)])
         }
 
         Some(rrule) => {
-            let until = ev
-                .until
-                .ok_or("Until is required when rrule is not empty")
-                .unwrap();
-
-            let rrules: Vec<String> = if rrule.contains("DTSTART") {
-                rrule
-                    .split("DTSTART")
-                    .filter(|s| !s.is_empty())
-                    .map(|s| "DTSTART".to_owned() + s)
-                    .collect()
-            } else {
-                vec![rrule.clone()]
-            };
-
-            println!("GETTING READY");
-
-            let rrule_sets: Vec<RRuleSet> = rrules
-                .iter()
-                .map(|rrule_str| {
-                    let rrule_clean = remove_until(rrule_str);
-                    println!("{0}", rrule_clean);
-                    RRuleSet::from_str(&rrule_clean).unwrap()
-                })
-                .collect();
+            let until = ev.until.unwrap();
+            let rrule_set_result = parse_rrules(&rrule);
+            
+            if rrule_set_result.is_err() {
+                return Err(rrule_set_result.err().unwrap());
+            }
+            
+            let rrule_sets = rrule_set_result.unwrap();
 
             let mut occurrences: Vec<OccurrencePeriod> = vec![];
             let duration = ev.end.signed_duration_since(ev.start);
@@ -68,7 +105,7 @@ pub fn parse_between(
                 // .all required a limit in order to prevent infinite loops
                 // in pass-roster the most frequently occurring event is a daily event
                 // so 1000 occurrences should be more than enough
-                let raw_occurrences = rrule_set.all_unchecked();
+                let (raw_occurrences, _) = rrule_set.all(1000);
 
                 // for each raw occurrence, if it is within the start and end date, add it to the occurrences
                 for occ in raw_occurrences {
@@ -93,28 +130,43 @@ pub fn parse_between(
                 }
             }
 
-            occurrences
+            Ok(occurrences)
         }
     }
 }
 
-pub fn get_cache_key(
-    ev: &Serializable,
-    start: &DateTime<Utc>,
-    end: &DateTime<Utc>,
-    include_partial: bool,
-) -> String {
-    let mut key = "".to_string();
+// pub fn get_cache_key(
+//     ev: &Serializable,
+//     start: &DateTime<Utc>,
+//     end: &DateTime<Utc>,
+//     include_partial: bool,
+// ) -> String {
+//     let mut key = "".to_string();
+// 
+//     key.push_str(start.to_string().as_str());
+//     key.push_str(end.to_string().as_str());
+//     key.push_str(ev.start.to_string().as_str());
+//     key.push_str(ev.end.to_string().as_str());
+//     key.push_str(ev.until.unwrap().to_string().as_str());
+//     key.push_str(ev.rrule.as_str());
+//     key.push_str(include_partial.to_string().as_str());
+// 
+//     key
+// }
 
-    key.push_str(start.to_string().as_str());
-    key.push_str(end.to_string().as_str());
-    key.push_str(ev.start.to_string().as_str());
-    key.push_str(ev.end.to_string().as_str());
-    key.push_str(ev.until.unwrap().to_string().as_str());
-    key.push_str(ev.rrule.as_str());
-    key.push_str(include_partial.to_string().as_str());
 
-    key
+fn string_to_rrule_sets_str(s: &str) -> Result<Vec<String>, InvalidRRuleError> {
+    if !s.contains("DTSTART") {
+        return Err(InvalidRRuleError::new("DTSTART is required".to_string()));
+    }
+
+    let result = s
+        .split("DTSTART")
+        .filter(|s| !s.is_empty())
+        .map(|s| "DTSTART".to_owned() + s)
+        .collect();
+    
+    Ok(result)
 }
 
 fn string_as_option(s: &str) -> Option<String> {
@@ -141,8 +193,24 @@ fn remove_until(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::occurrence_period::OccurrencePeriod;
-    use chrono::{DateTime, TimeZone, Utc};
+    
+    #[test]
+    fn test_string_to_rrules_dtstart_is_mandatory() {
+        let result = string_to_rrule_sets_str("FREQ=YEARLY;BYMONTH=1;BYMONTHDAY=1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_string_to_rrules_simple() {
+        let result = string_to_rrule_sets_str("DTSTART;TZID=Europe/London:20210614T110000\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR");
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    #[test]
+    fn test_string_to_rrules_multiple() {
+        let result = string_to_rrule_sets_str("DTSTART;TZID=Europe/London:20210614T110000\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR\nDTSTART;TZID=Europe/London:20210621T110000\nRRULE:FREQ=WEEKLY;INTERVAL=2;BYDAY=TU,TH");
+        assert_eq!(result.unwrap().len(), 2);
+    }
 
     #[test]
     fn test_parse_biweekly_week1() {
@@ -158,7 +226,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 0);
+        assert_eq!(periods.unwrap().len(), 0);
     }
 
     #[test]
@@ -175,7 +243,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 1);
+        assert_eq!(periods.unwrap().len(), 1);
     }
 
     #[test]
@@ -192,7 +260,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 3); // 1 from week 1, 2 from week 2
+        assert_eq!(periods.unwrap().len(), 3); // 1 from week 1, 2 from week 2
     }
 
     #[test]
@@ -209,7 +277,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 1);
+        assert_eq!(periods.unwrap().len(), 1);
     }
 
     #[test]
@@ -226,7 +294,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 0);
+        assert_eq!(periods.unwrap().len(), 0);
     }
 
     #[test]
@@ -243,7 +311,7 @@ mod tests {
 
         let periods = parse_between(&ev, start, end, false);
 
-        assert_eq!(periods.len(), 10);
+        assert_eq!(periods.unwrap().len(), 10);
     }
 
     #[test]
@@ -257,3 +325,9 @@ mod tests {
 fn str_to_utc(s: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc)
 }
+
+// fn str_to_london(s: &str) -> DateTime<FixedOffset> {
+// 
+//     let native = DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Utc).naive_utc()
+//     London.from_utc_datetime(&str_to_utc(s).naive_utc())
+// }

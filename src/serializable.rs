@@ -49,4 +49,10 @@ impl Serializable {
             rrule: serializable.rrule.into(),
         }
     }
+    
+    pub fn assert(&self) {
+        if !self.rrule.is_empty() && self.until.is_none() {
+            panic!("rrule must be empty or until must be set");
+        }
+    }
 }

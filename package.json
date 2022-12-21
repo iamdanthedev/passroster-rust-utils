@@ -1,15 +1,14 @@
 {
   "name": "passroster-rust-utils",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "description": "<div align=\"center\">",
   "main": "index.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "build": "wasm-pack build --target nodejs",
-    "build-test": "wasm-pack build --target nodejs && npm test"
+    "build": "cargo test && wasm-pack build --target nodejs",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
   },
   "author": "",
   "license": "ISC",

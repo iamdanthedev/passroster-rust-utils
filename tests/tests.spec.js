@@ -1,5 +1,7 @@
-import {parseBetween, SerializableJs} from '../pkg/passroster_rust_utils';
+import {parseBetween, validate, SerializableJs} from '../pkg/passroster_rust_utils';
 import {rrulestr} from 'rrule';
+
+/// more tests can be found in the pass-roster repo
 
 describe('test', () => {
     it('should parse rrule', () => {
@@ -26,6 +28,20 @@ describe('test', () => {
         expect(start2.toISOString()).toEqual("2020-02-02T09:30:00.000Z");
         expect(end2.toISOString()).toEqual("2020-02-02T10:30:00.000Z");
     });
+    
+    describe('validate', () => {
+        it('should pass', () => {
+            let result = validate("DTSTART:20120201T093000Z\nRRULE:FREQ=DAILY")
+            expect(result).toEqual(null);
+        });
+
+        it('should fail', () => {
+            let result = validate("RRULE:FREQ=DAILY")
+            expect(result).toMatch(/DTSTART is required/);
+        });
+        
+    });
+
 
 });
 
