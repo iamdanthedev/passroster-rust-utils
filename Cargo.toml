@@ -1,6 +1,6 @@
 [package]
 name = "passroster-rust-utils"
-version = "0.1.10"
+version = "0.2.0"
 authors = ["danthedev <iamdanthedev@gmail.com>"]
 edition = "2018"
 
